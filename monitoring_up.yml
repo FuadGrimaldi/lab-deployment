@@ -1,0 +1,7 @@
+- name: Deploy nginx proxy + monitoring stack
+  hosts: all
+  become: true
+  vars_files:
+    - "{{ manifest | default('environments/' ~ (deployment_environment | default('dev')) ~ '/manifest.yml') }}"
+  roles:
+    - fuad.homelab_stack.monitoring_stack

@@ -1,0 +1,12 @@
+---
+# defaults file for monitoring_stack
+# exporter .env
+node_exporter_version: "1.8.2"
+node_exporter_port: 9100
+# prometheus .env
+prometheus_port: 9090
+grafana_port: 3000
+prometheus_scrape_interval: "15s"
+prometheus_evaluation_interval: "15s"
+# network
+cms_network_name: "cms_network"

@@ -1,0 +1,5 @@
+ansible.cfg
+*.node_modules
+*.tar.gz
+.vscode/
+collections/

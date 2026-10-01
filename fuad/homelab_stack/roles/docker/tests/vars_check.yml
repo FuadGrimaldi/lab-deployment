@@ -1,0 +1,127 @@
+---
+# Variable validation — verifies all required/default variables resolve correctly
+
+- name: Validate Docker role variables
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    supported_os_map:
+      noble: "24.04"
+      jammy: "22.04"
+      focal: "20.04"
+      bionic: "18.04"
+  tasks:
+    - name: Include role defaults
+      ansible.builtin.include_vars:
+        file: ../defaults/main.yml
+
+    - name: Include role vars
+      ansible.builtin.include_vars:
+        file: ../vars/main.yml
+
+    - name: Assert required variables are defined and non-empty
+      ansible.builtin.assert:
+        that:
+          - docker_network_name is defined
+          - docker_network_name | length > 0
+          - gpg_key_email is defined
+          - gpg_key_email | length > 0
+          - dest_docker_files is defined
+          - dest_docker_files | length > 0
+          - dest_docker_file_tmp is defined
+          - dest_docker_file_tmp | length > 0
+          - target_os_release is defined
+          - target_os_release | length > 0
+          - target_os_version is defined
+          - target_os_version | length > 0
+          - docker_version is defined
+          - containerd_version is defined
+          - buildx_version is defined
+          - compose_version is defined
+          - docker_repo_base is defined
+          - docker_deb_files is defined
+          - docker_system_deps is defined
+        fail_msg: "CRITICAL: one or more required variables are missing or empty"
+        success_msg: "PASS: all required variables are defined and non-empty"
+
+    - name: Assert OS release and version are supported and consistent
+      ansible.builtin.assert:
+        that:
+          - target_os_release in supported_os_map
+          - supported_os_map[target_os_release] == target_os_version
+        fail_msg: "CRITICAL: unsupported or mismatched OS release/version"
+        success_msg: "PASS: OS release and version are supported and consistent"
+
+    - name: Assert package version strings are valid
+      ansible.builtin.assert:
+        that:
+          - docker_version is regex('^\d+\.\d+\.\d+-\d+$')
+          - containerd_version is regex('^\d+\.\d+\.\d+-\d+$')
+          - buildx_version is regex('^\d+\.\d+\.\d+-\d+$')
+          - compose_version is regex('^\d+\.\d+\.\d+-\d+$')
+        fail_msg: "CRITICAL: a package version has invalid format (expected X.Y.Z-N)"
+        success_msg: "PASS: all package versions have valid format"
+
+    - name: Assert derived repo URL resolves
+      ansible.builtin.assert:
+        that:
+          - docker_repo_base is regex('^https://download\.docker\.com/linux/ubuntu/dists/')
+          - "('/dists/' ~ target_os_release ~ '/') in docker_repo_base"
+          - docker_repo_base is regex('/pool/stable/amd64$')
+          - docker_repo_base is not search('\{\{')
+        fail_msg: "Invalid Docker repository URL: {{ docker_repo_base }}"
+        success_msg: "PASS: docker_repo_base resolves correctly"
+
+    - name: Assert docker_deb_files list is complete and rendered
+      ansible.builtin.assert:
+        that:
+          - docker_deb_files | length == 5
+          - docker_deb_files | unique | length == docker_deb_files | length
+          - docker_deb_files | select('search', '\{\{') | list | length == 0
+          - docker_deb_files | select('search', '_amd64\.deb$') | list | length == 5
+          - docker_deb_files | select('match', '^containerd\.io_' ~ containerd_version) | list | length == 1
+          - docker_deb_files | select('match', '^docker-ce_' ~ docker_version) | list | length == 1
+          - docker_deb_files | select('match', '^docker-ce-cli_' ~ docker_version) | list | length == 1
+          - docker_deb_files | select('match', '^docker-buildx-plugin_' ~ buildx_version) | list | length == 1
+          - docker_deb_files | select('match', '^docker-compose-plugin_' ~ compose_version) | list | length == 1
+          - >-
+            docker_deb_files | select('search', '~ubuntu\.' ~ target_os_version ~ '~'
+            ~ target_os_release) | list | length == 4
+        fail_msg: "CRITICAL: docker_deb_files incomplete or not rendered: {{ docker_deb_files }}"
+        success_msg: "PASS: docker_deb_files complete and rendered correctly"
+
+    - name: Assert system dependencies list is valid
+      ansible.builtin.assert:
+        that:
+          - docker_system_deps is sequence
+          - docker_system_deps is not string
+          - docker_system_deps | length > 0
+          - docker_system_deps | unique | length == docker_system_deps | length
+          - >-
+            docker_system_deps | select('match', '^[a-z0-9][a-z0-9+.\-]*$')
+            | list | length == docker_system_deps | length
+        fail_msg: >-
+          CRITICAL: docker_system_deps is empty, has duplicates, or contains
+          invalid package names
+        success_msg: "PASS: docker_system_deps is valid"
+
+    - name: Assert paths are well-formed
+      ansible.builtin.assert:
+        that:
+          - dest_docker_files is regex('^/')
+          - dest_docker_file_tmp is regex('^/')
+          - dest_docker_files != dest_docker_file_tmp
+          - dest_docker_files is not search('\{\{')
+        fail_msg: "CRITICAL: dest paths must be absolute, resolved, and different from each other"
+        success_msg: "PASS: staging paths are well-formed"
+
+    - name: Assert identity variables are well-formed
+      ansible.builtin.assert:
+        that:
+          - gpg_key_email is regex('^[^@\s]+@[^@\s]+$')
+          - docker_network_name is regex('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$')
+        fail_msg: >-
+          CRITICAL: gpg_key_email or docker_network_name has
+          invalid format
+        success_msg: "PASS: identity variables are well-formed"

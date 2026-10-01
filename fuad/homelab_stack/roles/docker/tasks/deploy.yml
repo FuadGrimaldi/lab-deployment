@@ -1,0 +1,103 @@
+---
+# ==============================================================================
+# PHASE 1: ASSET TRANSFER
+# ==============================================================================
+
+- name: Create Docker staging directory
+  ansible.builtin.file:
+    path: "{{ dest_docker_file_tmp }}"
+    state: directory
+    mode: "0755"
+
+- name: Transfer all staged .deb packages
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ dest_docker_file_tmp }}/"
+    mode: "0644"
+  with_fileglob:
+    - "{{ dest_docker_files }}/*.deb"
+
+- name: Transfer all staged .asc signatures
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ dest_docker_file_tmp }}/"
+    mode: "0644"
+  with_fileglob:
+    - "{{ dest_docker_files }}/*.asc"
+
+- name: Transfer Docker signing key
+  ansible.builtin.copy:
+    src: "{{ dest_docker_files }}/docker-signing-key.gpg"
+    dest: "{{ dest_docker_file_tmp }}/docker-signing-key.gpg"
+    mode: "0644"
+
+# ==============================================================================
+# PHASE 2: GPG VERIFICATION
+# ==============================================================================
+
+- name: Import Docker GPG public key
+  ansible.builtin.command:
+    cmd: "gpg --import {{ dest_docker_file_tmp }}/docker-signing-key.gpg"
+  register: gpg_import
+  changed_when: "'imported' in gpg_import.stderr or 'imported' in gpg_import.stdout"
+  failed_when: gpg_import.rc != 0
+
+- name: Verify Docker package signatures
+  ansible.builtin.command:
+    cmd: >-
+      gpg --verify
+      {{ dest_docker_file_tmp }}/{{ item }}.asc
+      {{ dest_docker_file_tmp }}/{{ item }}
+  loop: "{{ docker_deb_files }}"
+  register: gpg_verify
+  changed_when: false
+  failed_when: gpg_verify.rc != 0
+
+# ==============================================================================
+# PHASE 3: OFFLINE INSTALLATION
+# ==============================================================================
+
+- name: Check installed docker-ce version
+  ansible.builtin.command:
+    cmd: dpkg-query -W -f='${Version}' docker-ce
+  register: installed_docker_version
+  changed_when: false
+  failed_when: false
+
+- name: Install all packages
+  ansible.builtin.shell:
+    cmd: dpkg -i --force-overwrite {{ dest_docker_file_tmp }}/*.deb
+  register: docker_install
+  changed_when: false
+
+- name: Configure pending packages
+  ansible.builtin.command:
+    cmd: "dpkg --configure -a"
+  register: docker_configure
+  changed_when: false
+  failed_when: docker_configure.rc != 0
+
+# ==============================================================================
+# PHASE 4: SERVICE CONFIGURATION
+# ==============================================================================
+
+- name: Ensure docker group exists
+  ansible.builtin.group:
+    name: docker
+    state: present
+    system: true
+  tags: [service, docker]
+
+- name: Start Docker service
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: true
+  tags: [service, docker, molecule-notest]
+
+- name: Add user to docker group
+  ansible.builtin.user:
+    name: "{{ ansible_user }}"
+    groups: docker
+    append: true
+  tags: [permission, docker]

@@ -1,0 +1,140 @@
+---
+# Mock prep test — validates prep task structure and staging directory layout
+# Runs offline (no internet needed). Skips download/pull tasks via conditional.
+
+- name: Validate Docker prep staging structure (offline, no downloads)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    mock_root: "/tmp/docker_role_mock"
+    os_release_map:
+      noble: "24.04"
+      jammy: "22.04"
+      focal: "20.04"
+      bionic: "18.04"
+
+  tasks:
+    - name: Include role defaults
+      ansible.builtin.include_vars:
+        file: ../defaults/main.yml
+
+    - name: Include role vars
+      ansible.builtin.include_vars:
+        file: ../vars/main.yml
+
+    - name: Point staging paths to the mock root
+      ansible.builtin.set_fact:
+        dest_docker_files: "{{ mock_root }}/docker_assets"
+        dest_docker_file_tmp: "{{ mock_root }}/docker_debs"
+
+    - name: Run mock prep validation
+      block:
+        - name: Verify target_os_release matches target_os_version
+          ansible.builtin.assert:
+            that:
+              - os_release_map[target_os_release] is defined
+              - os_release_map[target_os_release] == target_os_version
+            fail_msg: "OS release/version mismatch"
+            success_msg: "PASS: OS release and version are consistent"
+
+        - name: Verify docker_deb_files is rendered correctly
+          ansible.builtin.assert:
+            that:
+              - docker_deb_files | length == 5
+              - docker_deb_files | select('search', '_amd64.deb$') | list | length == 5
+              - >-
+                docker_deb_files | select('search', '~ubuntu\\.' ~ target_os_version ~ '~' ~ target_os_release) |
+                list | length == 4
+              - docker_deb_files | select('search', '^containerd.io_' ~ containerd_version) | list | length == 1
+            fail_msg: "CRITICAL: docker_deb_files not rendered as expected: {{ docker_deb_files }}"
+            success_msg: "PASS: docker_deb_files rendered correctly"
+
+        - name: Verify docker_repo_base uses the configured OS release
+          ansible.builtin.assert:
+            that:
+              - "('/dists/' ~ target_os_release ~ '/') in docker_repo_base"
+            fail_msg: "CRITICAL: docker_repo_base does not match target_os_release"
+            success_msg: "PASS: docker_repo_base matches target_os_release"
+
+        - name: Create staging dir
+          ansible.builtin.file:
+            path: "{{ dest_docker_files }}"
+            state: directory
+            mode: "0755"
+
+        - name: Stat staging dir
+          ansible.builtin.stat:
+            path: "{{ dest_docker_files }}"
+          register: staging_dir
+
+        - name: Verify staging dir created correctly
+          ansible.builtin.assert:
+            that:
+              - staging_dir.stat.exists
+              - staging_dir.stat.isdir
+              - staging_dir.stat.mode == '0755'
+            fail_msg: "CRITICAL: staging directory missing or wrong permissions"
+            success_msg: "PASS: staging directory created correctly"
+
+        - name: Create mock .deb packages
+          ansible.builtin.file:
+            path: "{{ dest_docker_files }}/{{ item }}"
+            state: touch
+            mode: "0644"
+            modification_time: preserve
+            access_time: preserve
+          loop: "{{ docker_deb_files }}"
+
+        - name: Create mock .asc signatures
+          ansible.builtin.file:
+            path: "{{ dest_docker_files }}/{{ item }}.asc"
+            state: touch
+            mode: "0644"
+            modification_time: preserve
+            access_time: preserve
+          loop: "{{ docker_deb_files }}"
+
+        - name: Create mock docker-signing-key.gpg
+          ansible.builtin.file:
+            path: "{{ dest_docker_files }}/docker-signing-key.gpg"
+            state: touch
+            mode: "0644"
+            modification_time: preserve
+            access_time: preserve
+
+        - name: Find staged .deb files
+          ansible.builtin.find:
+            paths: "{{ dest_docker_files }}"
+            patterns: "*.deb"
+          register: staged_debs
+
+        - name: Find staged .asc signatures
+          ansible.builtin.find:
+            paths: "{{ dest_docker_files }}"
+            patterns: "*.asc"
+          register: staged_sigs
+
+        - name: Stat signing key
+          ansible.builtin.stat:
+            path: "{{ dest_docker_files }}/docker-signing-key.gpg"
+          register: signing_key
+
+        - name: Verify staged artifacts
+          ansible.builtin.assert:
+            that:
+              - staged_debs.matched == docker_deb_files | length
+              - staged_sigs.matched == docker_deb_files | length
+              - >-
+                staged_debs.files | map(attribute='path') |
+                map('regex_replace', '$', '.asc') | sort ==
+                staged_sigs.files | map(attribute='path') | sort
+              - signing_key.stat.exists
+            fail_msg: "CRITICAL: staged .deb/.asc/signing key layout is wrong"
+            success_msg: "PASS: every .deb has a matching .asc and the signing key exists"
+
+      always:
+        - name: Cleanup mock assets
+          ansible.builtin.file:
+            path: "{{ mock_root }}"
+            state: absent

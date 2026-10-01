@@ -1,0 +1,95 @@
+---
+- name: Verify Docker installation
+  hosts: ubuntu-noble
+  become: true
+
+  tasks:
+    - name: Check Docker CE package
+      ansible.builtin.command:
+        cmd: dpkg-query -W -f='${Status}' docker-ce
+      register: docker_ce_status
+      changed_when: false
+
+    - name: Verify Docker CE is installed
+      ansible.builtin.assert:
+        that:
+          - "'install ok installed' in docker_ce_status.stdout"
+        fail_msg: "docker-ce is not installed"
+        success_msg: "docker-ce is installed"
+
+    - name: Check Docker CLI
+      ansible.builtin.command:
+        cmd: docker --version
+      register: docker_version_result
+      changed_when: false
+
+    - name: Verify Docker CLI exists
+      ansible.builtin.assert:
+        that:
+          - docker_version_result.rc == 0
+        fail_msg: "Docker CLI is not available"
+        success_msg: "Docker CLI is available"
+
+    - name: Display Docker version
+      ansible.builtin.debug:
+        msg: "{{ docker_version_result.stdout }}"
+
+    - name: Check containerd package
+      ansible.builtin.command:
+        cmd: dpkg-query -W -f='${Status}' containerd.io
+      register: containerd_status
+      changed_when: false
+
+    - name: Verify containerd is installed
+      ansible.builtin.assert:
+        that:
+          - "'install ok installed' in containerd_status.stdout"
+        fail_msg: "containerd.io is not installed"
+        success_msg: "containerd.io is installed"
+
+    - name: Check Docker Compose
+      ansible.builtin.command:
+        cmd: docker compose version
+      register: docker_compose_result
+      changed_when: false
+
+    - name: Verify Docker Compose is available
+      ansible.builtin.assert:
+        that:
+          - docker_compose_result.rc == 0
+        fail_msg: "Docker Compose plugin is not available"
+        success_msg: "Docker Compose plugin is available"
+
+    - name: Display Docker Compose version
+      ansible.builtin.debug:
+        msg: "{{ docker_compose_result.stdout }}"
+
+    - name: Check Docker Buildx
+      ansible.builtin.command:
+        cmd: docker buildx version
+      register: docker_buildx_result
+      changed_when: false
+
+    - name: Verify Docker Buildx is available
+      ansible.builtin.assert:
+        that:
+          - docker_buildx_result.rc == 0
+        fail_msg: "Docker Buildx plugin is not available"
+        success_msg: "Docker Buildx plugin is available"
+
+    - name: Display Docker Buildx version
+      ansible.builtin.debug:
+        msg: "{{ docker_buildx_result.stdout }}"
+
+    - name: Check Docker CLI plugins directory
+      ansible.builtin.stat:
+        path: /usr/libexec/docker/cli-plugins
+      register: docker_cli_plugins_dir
+
+    - name: Verify Docker CLI plugins directory exists
+      ansible.builtin.assert:
+        that:
+          - docker_cli_plugins_dir.stat.exists
+          - docker_cli_plugins_dir.stat.isdir
+        fail_msg: "Docker CLI plugins directory does not exist"
+        success_msg: "Docker CLI plugins directory exists"

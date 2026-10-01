@@ -1,0 +1,10 @@
+---
+# site.yml — Master playbook (customizable via --tags)
+
+- name: Prep OpenDDS
+  import_playbook: prep.yml
+  tags: [prep_opendds]
+
+- name: Deploy OpenDDS
+  import_playbook: deploy.yml
+  tags: [deploy_opendds]

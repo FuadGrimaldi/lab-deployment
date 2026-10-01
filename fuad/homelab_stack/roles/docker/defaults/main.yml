@@ -1,0 +1,6 @@
+---
+# defaults for Docker role — override in inventory, group_vars, or playbook vars
+docker_network_name: "fuad_network"
+gpg_key_email: "docker-repo@localhost"
+dest_docker_files: "{{ playbook_dir }}/files/docker_assets"
+dest_docker_file_tmp: "/tmp/docker_debs"

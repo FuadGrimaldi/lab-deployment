@@ -1,0 +1,21 @@
+---
+- name: Converge
+  hosts: ubuntu-noble
+  become: true
+
+  tasks:
+    - name: Ensure /tmp has correct permissions
+      ansible.builtin.file:
+        path: /tmp
+        state: directory
+        mode: "1777"
+        owner: root
+        group: root
+
+    - name: Override files assets path for Docker role
+      ansible.builtin.set_fact:
+        dest_docker_files: "/tmp/docker_assets"
+        dest_docker_file_tmp: "/tmp/docker_debs"
+
+    - name: Include Docker role
+      ansible.builtin.import_tasks: ../../tasks/deploy.yml

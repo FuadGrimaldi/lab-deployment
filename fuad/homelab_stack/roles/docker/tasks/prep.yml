@@ -1,0 +1,80 @@
+---
+# ==============================================================================
+# PHASE 1: PREPARE STAGING DIRECTORY
+# ==============================================================================
+- name: Create local staging directory
+  ansible.builtin.file:
+    path: "{{ dest_docker_files }}"
+    state: directory
+    mode: "0755"
+
+# ==============================================================================
+# PHASE 2: DOWNLOAD OFFLINE PACKAGES
+# ==============================================================================
+- name: Download offline packages
+  ansible.builtin.get_url:
+    url: "{{ docker_repo_base }}/{{ item }}"
+    dest: "{{ dest_docker_files }}/"
+    mode: "0644"
+  loop: "{{ docker_deb_files }}"
+
+- name: Resolve full dependency list for system packages
+  ansible.builtin.shell:
+    cmd: >
+      set -o pipefail &&
+      apt-cache depends --recurse --no-recommends --no-suggests
+      --no-conflicts --no-breaks --no-replaces --no-enhances
+      {{ docker_system_deps | join(' ') }}
+      | grep -E '^\w' | sort -u
+    executable: /bin/bash
+  register: full_dep_list
+  changed_when: false
+
+- name: Download system dependencies # noqa: command-instead-of-module
+  ansible.builtin.command:
+    cmd: "apt-get download {{ full_dep_list.stdout_lines | join(' ') }}"
+    chdir: "{{ dest_docker_files }}"
+  changed_when: true
+
+# ==============================================================================
+# PHASE 3: GENERATE GPG KEY
+# ==============================================================================
+- name: Generate GPG key for Docker package signing
+  ansible.builtin.shell:
+    cmd: |
+      if ! gpg --list-keys "{{ gpg_key_email }}" > /dev/null 2>&1; then
+        gpg --batch --quiet --pinentry-mode loopback \
+          --passphrase '' \
+          --quick-generate-key "{{ gpg_key_email }}" rsa4096 sign never
+      fi
+  register: gpg_gen
+  changed_when: "'already' not in gpg_gen.stderr"
+
+# ==============================================================================
+# PHASE 4: SIGN DOCKER PACKAGES
+# ==============================================================================
+- name: Sign all staged packages
+  ansible.builtin.command:
+    cmd: >-
+      gpg --batch --yes
+      --default-key {{ gpg_key_email }}
+      --armor
+      --detach-sign
+      --output {{ item }}.asc
+      {{ item }}
+    chdir: "{{ dest_docker_files }}"
+  args:
+    creates: "{{ item }}.asc"
+  with_fileglob:
+    - "{{ dest_docker_files }}/*.deb"
+
+# ==============================================================================
+# PHASE 5: EXPORT PUBLIC KEY
+# ==============================================================================
+- name: Export Docker GPG public key
+  ansible.builtin.shell:
+    cmd: >
+      gpg --export --armor '{{ gpg_key_email }}'
+      > {{ dest_docker_files }}/docker-signing-key.gpg
+  args:
+    creates: "{{ dest_docker_files }}/docker-signing-key.gpg"

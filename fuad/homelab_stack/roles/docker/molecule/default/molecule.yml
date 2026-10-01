@@ -1,0 +1,52 @@
+---
+dependency:
+  name: galaxy
+  options:
+    ignore-errors: true
+driver:
+  name: docker
+platforms:
+  - name: ubuntu-noble
+    image: ubuntu:noble
+    dockerfile: Dockerfile
+    pre_build_image: false
+    privileged: false
+    command: "sleep infinity"
+    tmpfs:
+      - /run
+      - /run/lock
+      - /tmp
+provisioner:
+  name: ansible
+  inventory:
+    group_vars:
+      all:
+        gpg_key_email: "docker-repo@localhost"
+        target_os_release: "noble"
+        target_os_version: "24.04"
+        docker_version: "29.2.1-1"
+        containerd_version: "1.7.27-1"
+        buildx_version: "0.31.1-1"
+        compose_version: "5.0.2-1"
+        docker_repo_base: "https://download.docker.com/linux/ubuntu/dists/{{ target_os_release }}/pool/stable/amd64"
+        docker_deb_files:
+          - "containerd.io_{{ containerd_version }}_amd64.deb"
+          - "docker-ce-cli_{{ docker_version }}~ubuntu.{{ target_os_version }}~{{ target_os_release }}_amd64.deb"
+          - "docker-ce_{{ docker_version }}~ubuntu.{{ target_os_version }}~{{ target_os_release }}_amd64.deb"
+          - "docker-buildx-plugin_{{ buildx_version }}~ubuntu.{{ target_os_version }}~{{ target_os_release }}_amd64.deb"
+          - "docker-compose-plugin_{{ compose_version }}~ubuntu.{{ target_os_version }}~{{ target_os_release }}_amd64.deb"
+        docker_system_deps:
+          - pigz
+          - iptables
+          - nftables
+          - libnftables1
+
+    host_vars:
+      ubuntu-noble:
+        ansible_user: maintainer
+        ansible_user_id: maintainer
+
+      localhost:
+        dest_docker_files: "/tmp/docker_assets"
+verifier:
+  name: ansible

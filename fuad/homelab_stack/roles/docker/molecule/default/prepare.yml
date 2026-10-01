@@ -1,0 +1,13 @@
+---
+- name: Prepare Docker prerequisites
+  hosts: localhost
+  connection: local
+  become: true
+
+  tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+
+    - name: Prepare Docker assets
+      ansible.builtin.import_tasks: ../../tasks/prep.yml

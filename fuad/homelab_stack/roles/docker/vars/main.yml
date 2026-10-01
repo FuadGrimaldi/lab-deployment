@@ -1,0 +1,24 @@
+---
+# vars for docker role — derived and internal; do not override
+# variable os
+target_os_release: "jammy" # opsional: noble, jammy, focal, bionic
+target_os_version: "22.04" # opsional: 24.04, 22.04, 20.04, 18.04
+# variable version docker
+docker_version: "29.2.1-1"
+containerd_version: "1.7.27-1"
+buildx_version: "0.31.1-1"
+compose_version: "5.0.2-1"
+# template url repo docker
+docker_repo_base: "https://download.docker.com/linux/ubuntu/dists/{{ target_os_release }}/pool/stable/amd64"
+docker_deb_files:
+  - "containerd.io_{{ containerd_version }}_amd64.deb"
+  - "docker-ce-cli_{{ docker_version }}~ubuntu.{{ target_os_version }}~{{ target_os_release }}_amd64.deb"
+  - "docker-ce_{{ docker_version }}~ubuntu.{{ target_os_version }}~{{ target_os_release }}_amd64.deb"
+  - "docker-buildx-plugin_{{ buildx_version }}~ubuntu.{{ target_os_version }}~{{ target_os_release }}_amd64.deb"
+  - "docker-compose-plugin_{{ compose_version }}~ubuntu.{{ target_os_version }}~{{ target_os_release }}_amd64.deb"
+# system dependencies for docker installation
+docker_system_deps:
+  - pigz
+  - iptables
+  - nftables
+  - libnftables1

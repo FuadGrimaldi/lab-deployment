@@ -1,0 +1,34 @@
+---
+- name: Cleanup
+  hosts: localhost
+  connection: local
+  become: true
+
+  tasks:
+    - name: Remove staged docker asset directory
+      ansible.builtin.file:
+        path: "/tmp/docker_assets"
+        state: absent
+
+    - name: Remove Ubuntu image
+      ansible.builtin.command:
+        cmd: docker rmi -f ubuntu:noble
+      register: remove_ubuntu_image
+      changed_when: remove_ubuntu_image.rc == 0
+      failed_when: false
+
+    - name: Remove Molecule Local Ubuntu image
+      ansible.builtin.command:
+        cmd: docker rmi -f molecule_local/ubuntu:noble
+      register: remove_molecule_ubuntu_image
+      changed_when: remove_molecule_ubuntu_image.rc == 0
+      failed_when: false
+
+    - name: Remove generated GPG signing key from local keyring
+      ansible.builtin.shell:
+        cmd: >-
+          gpg --batch --yes --delete-secret-and-public-key
+          "docker-repo@localhost"
+      register: gpg_delete
+      failed_when: false
+      changed_when: "gpg_delete.rc == 0"

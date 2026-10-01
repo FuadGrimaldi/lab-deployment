@@ -1,0 +1,15 @@
+---
+skip_list:
+  - name[casing]
+  - name[template]
+  - fqcn[action-core]
+
+warn_list:
+  - experimental
+  - no-changed-when
+
+exclude_paths:
+  - .git/
+  - .github/
+  - molecule/
+  - tests/inventory

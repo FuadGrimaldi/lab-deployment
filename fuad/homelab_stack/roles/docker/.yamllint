@@ -1,0 +1,31 @@
+---
+extends: default
+
+rules:
+  line-length:
+    max: 120
+    level: warning
+  document-start:
+    present: true
+  braces:
+    forbid: non-empty
+    max-spaces-inside: 1
+  commas:
+    max-spaces-after: 1
+  comments:
+    min-spaces-from-content: 1
+  truthy:
+    allowed-values: ["true", "false", "yes", "no"]
+  indentation:
+    spaces: 2
+    indent-sequences: consistent
+  comments-indentation: false
+  octal-values:
+    forbid-implicit-octal: true
+    forbid-explicit-octal: true
+
+ignore: |
+  .git/
+  .github/
+  molecule/
+  tests/inventory

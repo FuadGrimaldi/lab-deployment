@@ -1,0 +1,69 @@
+pipeline {
+    agent {
+        docker {
+            image 'ubuntu:24.04'
+            args '-v /var/run/docker.sock:/var/run/docker.sock -u root:root'
+        }
+    }
+
+    options {
+        timeout(time: 30, unit: 'MINUTES')
+        timestamps()
+    }
+
+    environment {
+        PIP_BREAK_SYSTEM_PACKAGES = '1'
+        DEBIAN_FRONTEND = 'noninteractive'
+    }
+
+    stages {
+        stage('Install Dependencies') {
+            steps {
+                sh '''
+                    apt-get update
+                    apt-get install -y --no-install-recommends \
+                        python3 python3-pip python3-venv git rsync docker.io ca-certificates gnupg
+                    pip3 install ansible ansible-lint yamllint
+                '''
+            }
+        }
+
+        stage('Lint & Syntax Check') {
+            steps {
+                sh 'yamllint -c .yamllint .'
+                sh 'ansible-lint --nocolor'
+                sh '''
+                    for f in playbooks/*.yml tests/*.yml; do
+                        ansible-playbook "$f" --syntax-check
+                    done
+                '''
+            }
+        }
+
+        stage('Variable Validation') {
+            steps {
+                sh 'ansible-playbook tests/vars_check.yml'
+            }
+        }
+
+        stage('Mock Prep Test') {
+            steps {
+                sh 'ansible-playbook tests/mock_prep.yml'
+            }
+        }
+
+        stage('Molecule Integration') {
+            when {
+                expression {
+                    (env.GIT_BRANCH ?: '') ==~ /.*development$/ &&
+                    sh(script: 'docker info > /dev/null 2>&1', returnStatus: true) == 0
+                }
+            }
+            steps {
+                sh 'pip3 install molecule "molecule-plugins[docker]"'
+                sh 'molecule test'
+                sh 'molecule cleanup'
+            }
+        }
+    }
+}

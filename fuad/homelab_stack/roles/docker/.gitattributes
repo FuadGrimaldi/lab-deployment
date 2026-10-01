@@ -1,0 +1,13 @@
+# normalize all text files to use LF line endings 
+* text=auto eol=lf
+
+# explicitly set the line endings for specific file types
+*.yml text eol=lf
+*.yaml text eol=lf
+*.sh text eol=lf
+*.md text eol=lf
+*.py text eol=lf
+
+# treat binary files as binary
+*.gz binary
+*.tar binary

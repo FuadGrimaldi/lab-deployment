@@ -3,3 +3,4 @@ ansible.cfg
 *.tar.gz
 .vscode/
 collections/
+environments/

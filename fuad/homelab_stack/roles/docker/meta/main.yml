@@ -1,10 +1,10 @@
 ---
 galaxy_info:
   role_name: docker
-  namespace: len-iot
-  author: DevOps Team
+  namespace: lab-devops
+  author: Fuad Grimaldi
   description: Ansible role to prepare and deploy Docker on Ubuntu 24.04 target hosts.
-  company: PT Len IOT
+  company: N/A
 
   license: GPL-3.0-only
 

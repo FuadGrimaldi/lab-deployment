@@ -1,0 +1,47 @@
+---
+# molecule file for valkey role
+dependency:
+  name: galaxy
+  options:
+    ignore-errors: true
+driver:
+  name: docker
+platforms:
+  - name: ubuntu-noble
+    image: ubuntu:noble
+    dockerfile: Dockerfile
+    pre_build_image: false
+    command: sleep infinity
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /tmp/test-valkey:/tmp/test-valkey
+provisioner:
+  name: ansible
+  config_options:
+    defaults:
+      remote_tmp: /var/tmp/.ansible/tmp
+  inventory:
+    host_vars:
+      ubuntu-noble:
+        ansible_user: maintainer
+        ansible_user_id: maintainer
+        deploy_user: maintainer
+        valkey_container_name: "lab-valkey-molecule"
+        valkey_deploy_dir: /tmp/test-valkey
+        dest_valkey_files: /tmp/valkey_assets
+        docker_network_name: fuad_network_molecule
+        valkey_version: "9.1.2"
+        valkey_image: "valkey/valkey:{{ valkey_version }}"
+        valkey_url: "http://lab-valkey-molecule"
+        valkey_port: 6379
+        gpg_key_email: "valkey-repo@localhost"
+      localhost:
+        dest_valkey_files: /tmp/valkey_assets
+        valkey_version: "9.1.2"
+        valkey_image: "valkey/valkey:{{ valkey_version }}"
+        gpg_key_email: "valkey-repo@localhost"
+        valkey_container_name: "lab-valkey-molecule"
+        valkey_deploy_dir: /tmp/test-valkey
+        docker_network_name: fuad_network_molecule
+verifier:
+  name: ansible

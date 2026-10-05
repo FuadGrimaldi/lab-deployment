@@ -1,0 +1,40 @@
+---
+# molecule verify file for valkey role
+- name: Verify deployment
+  hosts: all
+  become: true
+  tasks:
+    - name: Check docker-compose.yaml deployed
+      ansible.builtin.stat:
+        path: "{{ valkey_deploy_dir }}/docker-compose.yaml"
+      register: compose_file
+
+    - name: Assert docker-compose.yaml exists
+      ansible.builtin.assert:
+        that: compose_file.stat.exists
+        fail_msg: "FAIL: docker-compose.yaml not deployed"
+        success_msg: "PASS: docker-compose.yaml deployed"
+
+    - name: Check Valkey container is running
+      ansible.builtin.command: docker inspect -f "{{ '{{.State.Running}}' }}" {{ valkey_container_name }}
+      register: container_running
+      changed_when: false
+      failed_when: false
+
+    - name: Assert valkey container is running
+      ansible.builtin.assert:
+        that: "'true' in container_running.stdout"
+        fail_msg: "FAIL: {{ valkey_container_name }} container is not running"
+        success_msg: "PASS: {{ valkey_container_name }} container is running"
+
+    - name: Check Valkey responds to ping
+      ansible.builtin.command: docker exec {{ valkey_container_name }} valkey-cli ping
+      register: valkey_ping
+      changed_when: false
+      failed_when: false
+
+    - name: Assert Valkey responds to ping
+      ansible.builtin.assert:
+        that: "'PONG' in valkey_ping.stdout"
+        fail_msg: "FAIL: Valkey is not responding"
+        success_msg: "PASS: Valkey is responding"

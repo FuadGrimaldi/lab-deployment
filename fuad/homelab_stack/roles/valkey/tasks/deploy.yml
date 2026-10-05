@@ -1,0 +1,99 @@
+---
+# tasks file (deploy) for valkey role
+
+# ==============================================================================
+# PHASE 1: PREREQUISITES
+# ==============================================================================
+- name: Check or Create Docker Network
+  ansible.builtin.shell:
+    cmd: "docker network inspect {{ docker_network_name }} || docker network create {{ docker_network_name }}"
+  register: network_result
+  changed_when: "'created' in network_result.stdout"
+
+- name: Create Valkey deploy directory
+  ansible.builtin.file:
+    path: "{{ valkey_deploy_dir }}"
+    state: directory
+    owner: "{{ ansible_user | default('root') }}"
+    group: "{{ ansible_user | default('root') }}"
+    mode: "0755"
+
+- name: Ensure staging directory exists on target host
+  ansible.builtin.file:
+    path: "{{ dest_valkey_files }}"
+    state: directory
+    owner: "{{ ansible_user | default('root') }}"
+    group: "{{ ansible_user | default('root') }}"
+    mode: "0777"
+  become: true
+
+# ==============================================================================
+# PHASE 2: LOAD IMAGE FROM OFFLINE ASSET
+# ==============================================================================
+
+- name: Check if Valkey tar already exists on target host (e.g. Molecule mount)
+  ansible.builtin.stat:
+    path: "{{ dest_valkey_files }}/valkey-{{ valkey_version }}.tar"
+  register: tar_stat
+
+- name: Copy valkey assets to target host (Air-Gapped remote transfer)
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ dest_valkey_files }}/"
+    mode: "0644"
+  become: true
+  loop:
+    - "{{ valkey_files_dir }}/valkey-signing-key.gpg"
+    - "{{ valkey_files_dir }}/valkey-{{ valkey_version }}.tar"
+    - "{{ valkey_files_dir }}/valkey-{{ valkey_version }}.tar.asc"
+
+- name: Import valkey GPG public key
+  ansible.builtin.command:
+    cmd: "gpg --import {{ dest_valkey_files }}/valkey-signing-key.gpg"
+  register: gpg_import
+  changed_when: "'imported' in gpg_import.stderr or 'imported' in gpg_import.stdout"
+  failed_when: gpg_import.rc != 0
+
+- name: Verify valkey image tar signature
+  ansible.builtin.command:
+    cmd: >-
+      gpg --verify
+      {{ dest_valkey_files }}/valkey-{{ valkey_version }}.tar.asc
+      {{ dest_valkey_files }}/valkey-{{ valkey_version }}.tar
+  register: gpg_verify
+  changed_when: false
+  failed_when: gpg_verify.rc != 0
+
+- name: Check whether valkey image is already loaded
+  ansible.builtin.command:
+    cmd: "docker image inspect {{ valkey_image }}"
+  register: valkey_image_check
+  changed_when: false
+  failed_when: false
+
+- name: Load valkey image from tar
+  ansible.builtin.command:
+    cmd: >-
+      docker load
+      -i {{ dest_valkey_files }}/valkey-{{ valkey_version }}.tar
+  when: valkey_image_check.rc != 0
+  register: image_load
+  changed_when: true
+
+# ==============================================================================
+# PHASE 3: DEPLOY
+# ==============================================================================
+
+- name: Copy docker-compose file
+  ansible.builtin.template:
+    # src: valkey-compose.yaml.j2
+    src: "{{ valkey_templates_dir }}/valkey-compose.yaml.j2"
+    dest: "{{ valkey_deploy_dir }}/docker-compose.yaml"
+    mode: "0644"
+
+- name: Start valkey container
+  ansible.builtin.command:
+    cmd: "docker compose up -d"
+    chdir: "{{ valkey_deploy_dir }}"
+  register: compose_up_result
+  changed_when: "'Started' in compose_up_result.stderr or 'Created' in compose_up_result.stderr"

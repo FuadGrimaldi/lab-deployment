@@ -1,0 +1,20 @@
+---
+# playbooks prep for valkey role
+- name: Prep Valkey
+  hosts: localhost
+  connection: local
+  tasks:
+    - name: Include role defaults
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../defaults/main.yml"
+
+    - name: Include role vars
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../vars/main.yml"
+
+    - name: Override staging directory to repo root
+      ansible.builtin.set_fact:
+        valkey_files_dir: "{{ playbook_dir }}/../files/valkey_assets"
+
+    - name: Run prep tasks
+      ansible.builtin.import_tasks: ../tasks/prep.yml

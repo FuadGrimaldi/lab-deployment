@@ -1,0 +1,52 @@
+---
+# molecule cleanup file for valkey role
+- name: Cleanup Valkey Molecule test resources
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Remove Valkey test container
+      ansible.builtin.command:
+        cmd: docker rm -f {{ valkey_container_name }}
+      register: remove_container
+      changed_when: remove_container.rc == 0
+      failed_when: false
+
+    - name: Disconnect Molecule instance from test network
+      ansible.builtin.command:
+        cmd: docker network disconnect -f {{ docker_network_name }} ubuntu-noble
+      register: disconnect_network
+      changed_when: disconnect_network.rc == 0
+      failed_when: false
+
+    - name: Remove Molecule test network
+      ansible.builtin.command:
+        cmd: docker network rm {{ docker_network_name }}
+      register: remove_network
+      changed_when: remove_network.rc == 0
+      failed_when: false
+
+    - name: Remove real valkey image pulled during prepare
+      ansible.builtin.command:
+        cmd: docker rmi -f {{ valkey_image }}
+      register: remove_image
+      changed_when: remove_image.rc == 0
+      failed_when: false
+
+    - name: Remove GPG signing key generated during prepare
+      ansible.builtin.command:
+        cmd: gpg --batch --yes --delete-secret-and-public-key {{ gpg_key_email }}
+      register: remove_gpg_key
+      changed_when: remove_gpg_key.rc == 0
+      failed_when: false
+
+    - name: Remove test deployment directory and prepare-stage artifacts
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ valkey_deploy_dir }}"
+        - "{{ dest_valkey_files }}"
+        - /tmp/gpg_home

@@ -1,0 +1,14 @@
+services:
+  valkey:
+    image: {{ valkey_image }}
+    container_name: {{ valkey_container_name }}
+    restart: always    
+    ports:
+      - "{{ valkey_port }}:6379"      
+    networks:
+      cms-network:
+
+networks:
+  cms-network:
+    external: true
+    name: {{ docker_network_name }}

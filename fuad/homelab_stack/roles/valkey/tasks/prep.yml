@@ -1,0 +1,60 @@
+---
+# tasks file (prep) for valkey role
+
+# ==============================================================================
+# PHASE 1: PULL Valkey IMAGES
+# ==============================================================================
+- name: Create staging directory for Valkey images
+  ansible.builtin.file:
+    path: "{{ valkey_files_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Pull Valkey images
+  ansible.builtin.command:
+    cmd: "docker pull --platform linux/amd64 {{ valkey_image }}"
+  register: pull_status
+  changed_when: "'Downloaded newer image' in pull_status.stdout"
+# ==============================================================================
+# PHASE 2: SAVE Valkey IMAGES
+# ==============================================================================
+- name: Save Valkey images to tar
+  ansible.builtin.command:
+    cmd: "docker save -o {{ valkey_files_dir }}/valkey-{{ valkey_version }}.tar {{ valkey_image }}"
+  args:
+    creates: "{{ valkey_files_dir }}/valkey-{{ valkey_version }}.tar"
+# ==============================================================================
+# PHASE 3: SIGN IMAGE
+# ==============================================================================
+- name: Generate GPG key for Valkey image signing
+  ansible.builtin.shell:
+    cmd: |
+      if ! gpg --list-keys "{{ gpg_key_email }}" > /dev/null 2>&1; then
+        gpg --batch --quiet --pinentry-mode loopback \
+          --passphrase '' \
+          --quick-generate-key "{{ gpg_key_email }}" rsa4096 sign never
+      fi
+  register: gpg_gen
+  changed_when: "'already' not in gpg_gen.stderr"
+
+- name: Sign Valkey image tar
+  ansible.builtin.command:
+    cmd: >-
+      gpg --batch --yes
+      --default-key {{ gpg_key_email }}
+      --armor
+      --detach-sign
+      --output {{ valkey_files_dir }}/valkey-{{ valkey_version }}.tar.asc
+      {{ valkey_files_dir }}/valkey-{{ valkey_version }}.tar
+  args:
+    creates: "{{ valkey_files_dir }}/valkey-{{ valkey_version }}.tar.asc"
+# ==============================================================================
+# PHASE 4: EXPORT PUBLIC KEY
+# ==============================================================================
+- name: Export GPG public key
+  ansible.builtin.shell:
+    cmd: >
+      gpg --export --armor '{{ gpg_key_email }}'
+      > {{ valkey_files_dir }}/valkey-signing-key.gpg
+  args:
+    creates: "{{ valkey_files_dir }}/valkey-signing-key.gpg"

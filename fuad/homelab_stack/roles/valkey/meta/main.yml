@@ -1,0 +1,24 @@
+---
+galaxy_info:
+  role_name: valkey
+  namespace: lab-devops
+  author: Fuad Grimaldi
+  description: Ansible role to prepare and deploy Valkey on Ubuntu 24.04 target hosts.
+  company: N/A
+
+  license: GPL-3.0-only
+
+  min_ansible_version: "2.15"
+
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+
+  galaxy_tags:
+    - valkey
+    - ubuntu
+    - deployment
+    - caching
+
+dependencies: []

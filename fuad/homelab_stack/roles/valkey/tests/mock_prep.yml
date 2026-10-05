@@ -1,0 +1,60 @@
+---
+# Mock prep test — validates prep task structure and staging directory layout
+# Runs offline (no internet needed). Skips download/pull tasks via conditional.
+- name: Validate prep task structure (offline, no pulls)
+  hosts: localhost
+  connection: local
+  vars:
+    dest_valkey_files: "{{ playbook_dir }}/../files/test_assets"
+    run_mock: true
+  tasks:
+    - name: Include role defaults
+      ansible.builtin.include_vars:
+        file: ../defaults/main.yml
+
+    - name: Include role vars
+      ansible.builtin.include_vars:
+        file: ../vars/main.yml
+
+    - name: Create staging dir (verified)
+      ansible.builtin.file:
+        path: "{{ dest_valkey_files }}/docker_images"
+        state: directory
+        mode: "0755"
+
+    - name: Assert staging directory exists
+      ansible.builtin.stat:
+        path: "{{ dest_valkey_files }}/docker_images"
+      register: staging_dir
+
+    - name: Verify staging dir created correctly
+      ansible.builtin.assert:
+        that:
+          - staging_dir.stat.exists
+          - staging_dir.stat.isdir
+          - staging_dir.stat.mode == '0755'
+        fail_msg: "CRITICAL: staging directory docker_images missing or wrong permissions"
+        success_msg: "PASS: staging directory docker_images created correctly"
+
+    - name: Create mock valkey image tarball for deploy tests
+      ansible.builtin.file:
+        path: "{{ dest_valkey_files }}/docker_images/valkey_{{ valkey_version }}.tar"
+        state: touch
+        mode: "0644"
+
+    - name: Assert mock tarball file exists
+      ansible.builtin.stat:
+        path: "{{ dest_valkey_files }}/docker_images/valkey_{{ valkey_version }}.tar"
+      register: mock_tar
+
+    - name: Verify mock tarball
+      ansible.builtin.assert:
+        that: mock_tar.stat.exists
+        fail_msg: "CRITICAL: mock valkey tarball not created"
+        success_msg: "PASS: mock valkey tarball exists"
+
+  post_tasks:
+    - name: Cleanup test assets
+      ansible.builtin.file:
+        path: "{{ playbook_dir }}/../files/test_assets"
+        state: absent

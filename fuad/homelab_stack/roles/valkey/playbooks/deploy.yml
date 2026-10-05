@@ -1,0 +1,24 @@
+---
+# playbooks deploy for valkey role
+- name: Deploy Valkey
+  hosts: all
+  become: true
+  tasks:
+    - name: Include role defaults
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../defaults/main.yml"
+
+    - name: Include role vars
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../vars/main.yml"
+
+    - name: Override template staging directory to repo root
+      ansible.builtin.set_fact:
+        valkey_templates_dir: "{{ playbook_dir }}/../templates"
+
+    - name: Override files staging directory to repo root
+      ansible.builtin.set_fact:
+        valkey_files_dir: "{{ playbook_dir }}/../files/valkey_assets"
+
+    - name: Run deployment tasks
+      ansible.builtin.import_tasks: ../tasks/deploy.yml

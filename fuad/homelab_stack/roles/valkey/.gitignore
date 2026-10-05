@@ -1,0 +1,38 @@
+# === Ansible configuration ===
+ansible.cfg
+
+# === Staged Assets (hasil prep, jangan di-commit) ===
+files/
+collections/
+*.node_modules
+*.tar.gz
+
+# === Local source code move to gitmodules===
+
+# === App secrets ===
+**/.env
+!**/.env.example
+
+# === Misc ===
+*.retry
+__pycache__/
+*.pyc
+.DS_Store
+
+# === Vagrant ===
+.vagrant/
+vagrantfile
+
+# === IDEs ===
+.vscode/
+.crossnote/
+/docs
+
+# === env ===
+environments/
+
+# === Molecule ===
+.molecule/
+
+# === Ansible artifacts ===
+.ansible/

@@ -1,0 +1,5 @@
+---
+# vars file for valkey role
+valkey_version: "9.1.2"
+valkey_base_image: "valkey/valkey"
+valkey_image: "{{ valkey_base_image }}:{{ valkey_version }}"

@@ -1,0 +1,8 @@
+---
+# test file for valkey role
+- name: Run role tests
+  hosts: localhost
+  connection: local
+  tasks:
+    - name: Import main tasks
+      ansible.builtin.import_tasks: ../tasks/main.yml

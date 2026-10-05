@@ -1,0 +1,80 @@
+---
+# molecule converge file for valkey role
+- name: Converge — run deploy tasks
+  hosts: all
+  become: true
+  tasks:
+    - name: Ensure /tmp has correct permissions
+      ansible.builtin.file:
+        path: /tmp
+        state: directory
+        mode: "1777"
+        owner: root
+        group: root
+
+    - name: Install prerequisites for docker-cli repo
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+          - gnupg
+        state: present
+        update_cache: true
+        force_apt_get: true
+
+    - name: Ensure apt keyrings directory exists
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Add Docker GPG key
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: "0644"
+
+    - name: Add Docker apt repo
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu noble stable"
+        state: present
+        filename: docker
+
+    - name: Install docker-cli only (daemon lives on host, sibling-container pattern)
+      ansible.builtin.apt:
+        name:
+          - docker-ce-cli
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+        force_apt_get: true
+
+    - name: Verify docker-cli can reach host daemon via mounted socket
+      ansible.builtin.command: docker info
+      changed_when: false
+
+    - name: Create Molecule CMS network
+      ansible.builtin.command:
+        cmd: docker network create {{ docker_network_name }}
+      register: network_create
+      changed_when: network_create.rc == 0
+      failed_when:
+        - network_create.rc != 0
+        - "'already exists' not in network_create.stderr"
+
+    - name: Connect Molecule instance to CMS network
+      ansible.builtin.command:
+        cmd: docker network connect {{ docker_network_name }} {{ inventory_hostname }}
+      register: network_connect
+      changed_when: network_connect.rc == 0
+      failed_when:
+        - network_connect.rc != 0
+        - "'already exists' not in network_connect.stderr"
+
+    - name: Override templates staging to repo root (molecule context)
+      ansible.builtin.set_fact:
+        valkey_files_dir: "/tmp/valkey_assets"
+        valkey_templates_dir: "{{ playbook_dir }}/../../templates"
+
+    - name: Run deploy tasks
+      ansible.builtin.import_tasks: ../../tasks/deploy.yml

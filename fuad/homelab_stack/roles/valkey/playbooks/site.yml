@@ -1,0 +1,11 @@
+---
+# playbooks file for valkey role
+- name: Prep Valkey
+  ansible.builtin.import_playbook: prep.yml
+  tags:
+    - prep_valkey
+
+- name: Deploy Valkey
+  ansible.builtin.import_playbook: deploy.yml
+  tags:
+    - deploy_valkey

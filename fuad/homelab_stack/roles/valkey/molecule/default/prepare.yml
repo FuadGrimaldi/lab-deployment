@@ -1,0 +1,28 @@
+---
+# molecule prepare file for valkey role
+- name: Pull and prepare real Valkey image on controller
+  hosts: localhost
+  connection: local
+  become: true
+  tasks:
+    - name: Reset stale state before building assets
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ dest_valkey_files }}"
+        - /tmp/gpg_home
+
+    - name: Override dir staging to repo root (molecule context)
+      ansible.builtin.set_fact:
+        valkey_files_dir: "/tmp/valkey_assets"
+
+    - name: Run real prep tasks (pull, save, sign)
+      ansible.builtin.import_tasks: ../../tasks/prep.yml
+
+    - name: Ensure prepared assets are readable by deploy users
+      ansible.builtin.file:
+        path: "{{ dest_valkey_files }}"
+        state: directory
+        mode: "0755"
+        recurse: true

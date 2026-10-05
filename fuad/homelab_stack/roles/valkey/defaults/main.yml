@@ -1,0 +1,12 @@
+---
+# defaults file for valkey role
+deploy_user: "nzo"
+valkey_container_name: "lab-valkey"
+valkey_deploy_dir: "/home/{{ deploy_user }}/valkey"
+dest_valkey_files: "/tmp/valkey_assets/docker_images"
+valkey_files_dir: "{{ playbook_dir }}/files/valkey_assets"
+valkey_templates_dir: "{{ playbook_dir }}/roles/roles-valkey/templates"
+docker_network_name: "fuad_network"
+valkey_port: 6379
+valkey_url: "http://127.0.0.1"
+gpg_key_email: "valkey-repo@localhost"

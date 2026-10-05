@@ -1,0 +1,73 @@
+---
+# Variable validation — verifies all required/default variables resolve correctly
+
+- name: Validate role variables
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  tasks:
+    - name: Include role defaults
+      ansible.builtin.include_vars:
+        file: ../defaults/main.yml
+
+    - name: Include role vars
+      ansible.builtin.include_vars:
+        file: ../vars/main.yml
+
+    - name: Assert required variables are defined and non-empty
+      ansible.builtin.assert:
+        that:
+          - deploy_user is defined
+          - deploy_user | length > 0
+          - valkey_container_name is defined
+          - valkey_container_name | length > 0
+          - valkey_deploy_dir is defined
+          - valkey_deploy_dir | length > 0
+          - dest_valkey_files is defined
+          - dest_valkey_files | length > 0
+          - valkey_files_dir is defined
+          - valkey_files_dir | length > 0
+          - valkey_templates_dir is defined
+          - valkey_templates_dir | length > 0
+          - docker_network_name is defined
+          - docker_network_name | length > 0
+          - valkey_port is defined
+          - valkey_url is defined
+          - valkey_url | length > 0
+          - gpg_key_email is defined
+          - gpg_key_email | length > 0
+        fail_msg: "CRITICAL: one or more required variables are missing or empty"
+        success_msg: "PASS: all required variables are defined and non-empty"
+
+    - name: Assert derived variables resolve
+      ansible.builtin.assert:
+        that:
+          - valkey_base_image is defined
+          - valkey_image is defined
+          - valkey_base_image in valkey_image
+          - valkey_version in valkey_image
+        fail_msg: "CRITICAL: derived variable resolution failed"
+        success_msg: "PASS: all derived variables resolve correctly"
+
+    - name: Assert version string is valid
+      ansible.builtin.assert:
+        that:
+          - valkey_version is regex('^\d+\.\d+\.\d+$')
+        fail_msg: "CRITICAL: valkey_version format invalid (expected X.Y.Z)"
+        success_msg: "PASS: valkey_version is valid format"
+
+    - name: Assert port is valid
+      ansible.builtin.assert:
+        that:
+          - valkey_port | int > 0
+          - valkey_port | int < 65536
+        fail_msg: "CRITICAL: valkey_port is invalid"
+        success_msg: "PASS: valkey_port is valid"
+
+    - name: Assert deploy dir path is well-formed
+      ansible.builtin.assert:
+        that:
+          - valkey_deploy_dir is regex('^/')
+          - deploy_user in valkey_deploy_dir
+        fail_msg: "CRITICAL: valkey_deploy_dir must be absolute and contain deploy_user"
+        success_msg: "PASS: valkey_deploy_dir is well-formed"

@@ -1,7 +1,7 @@
 pipeline {
     agent {
         docker {
-            image 'ubuntu:24.04'
+            image 'python:3.12'
             args '-v /var/run/docker.sock:/var/run/docker.sock -u root:root'
         }
     }
@@ -13,17 +13,14 @@ pipeline {
 
     environment {
         PIP_BREAK_SYSTEM_PACKAGES = '1'
-        DEBIAN_FRONTEND = 'noninteractive'
     }
 
     stages {
         stage('Install Dependencies') {
             steps {
-                sh '''
-                    apt-get update
-                    apt-get install -y --no-install-recommends \
-                        python3 python3-pip python3-venv git rsync docker.io ca-certificates gnupg
-                    pip3 install ansible ansible-lint yamllint
+                sh '''                    
+                    pip install ansible ansible-lint yamllint
+                    apt-get update && apt-get install -y --no-install-recommends docker.io docker-cli rsync
                 '''
             }
         }
@@ -54,16 +51,17 @@ pipeline {
 
         stage('Molecule Integration') {
             when {
-                expression {
+                expression {                    
                     (env.GIT_BRANCH ?: '') ==~ /.*development$/ &&
                     sh(script: 'docker info > /dev/null 2>&1', returnStatus: true) == 0
                 }
             }
             steps {
-                sh 'pip3 install molecule "molecule-plugins[docker]"'
+                sh 'pip install molecule "molecule-plugins[docker]"'
                 sh 'molecule test'
                 sh 'molecule cleanup'
             }
         }
     }
 }
+

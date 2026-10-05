@@ -8,17 +8,33 @@ This repository is a Galaxy-compatible Ansible role. The role content lives at t
 
 ## Features
 
-- Prepare Docker installation assets
-- Deploy Docker to target Ubuntu 24.04 hosts
-- Support fully offline installation
+- Download pinned Docker `.deb` packages and their system dependencies on the controller
+- Sign every package with GPG and verify the signatures on the target
+- Install Docker fully offline on target Ubuntu hosts (no internet access needed on the target)
 - Modular task structure (prep vs deploy)
+- Supported Ubuntu releases: `noble` (24.04), `jammy` (22.04), `focal` (20.04), `bionic` (18.04)
+
+---
+
+## How It Works
+
+```text
+Controller (internet)                         Target (offline)
+┌──────────────────────────┐                  ┌──────────────────────────────┐
+│ prep.yml                 │                  │ deploy.yml                   │
+│ 1. Download .deb + deps  │   files/         │ 1. Copy .deb, .asc, key      │
+│ 2. Generate GPG key      │ ───────────────► │ 2. Verify GPG signatures     │
+│ 3. Sign packages         │  docker_assets   │ 3. Install with dpkg         │
+│ 4. Export public key     │                  │ 4. Start Docker, set group   │
+└──────────────────────────┘                  └──────────────────────────────┘
+```
 
 ---
 
 ## Repository Structure
 
 ```text
-roles-seaweedfs/               # Role root (Galaxy-compatible)
+roles-docker/                  # Role root (Galaxy-compatible)
 ├── tasks/                     # Role tasks
 │   ├── main.yml               #   Entry point (prep + deploy)
 │   ├── prep.yml               #   Prep phase (controller)
@@ -27,8 +43,6 @@ roles-seaweedfs/               # Role root (Galaxy-compatible)
 │   └── main.yml               #   Default variables
 ├── vars/
 │   └── main.yml               #   Derived/internal variables
-├── handlers/
-│   └── main.yml               #   Handlers
 ├── meta/
 │   └── main.yml               #   Galaxy metadata
 │
@@ -61,141 +75,44 @@ roles-seaweedfs/               # Role root (Galaxy-compatible)
 
 ---
 
-## Installation
-
-### Provision a Fresh VM with Vagrant
-
-Provision and start a fresh VM before configuring the deploy user:
-
-```bash
-vagrant up
-vagrant status
-```
-
-After provisioning completes, continue with the post-setup steps below.
-
-### Post-Setup: Create Deploy User
-
-If using Vagrant, create the deploy user that Ansible will use to connect:
-
-```bash
-# SSH into the VM
-vagrant ssh <vm_name>
-
-# Create user and grant sudo
-sudo useradd -m -s /bin/bash <username>
-sudo passwd <username>
-echo "<username> ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/<username>
-exit
-
-# Inject your SSH public key from the host (will prompt for password)
-ssh-copy-id -i ~/.ssh/<your_key> <username>@<vm_ip>
-```
-
-### Connetion for target
-
-Update environments/dev/inventory.yml to match your VM:
-
-```
-all:
-  children:
-    docker_servers:
-      hosts:
-        <vm_name>:
-          ansible_host: <vm_ip>
-          ansible_user: <username>
-```
-
-Update ansible.cfg:
-
-```
-[defaults]
-remote_user = <username>
-host_key_checking = False
-private_key_file = ~/.ssh/<your_key>
-roles_path = ./roles
-```
-
-### Via Ansible Galaxy (stable release)
-
-​`
-ansible-galaxy role install git+https://gitea.len-iot.id/ansible/roles-docker.git,[version]
-​`
-
-### Via requirements.yml (stable release)
-
-```
-roles:
-  - name: roles-docker
-    src: https://gitea.len-iot.id/ansible/roles-docker.git
-    scm: git
-    version: [version]
-```
-
-```
-ansible-galaxy install -r requirements.yml -p roles/ --force
-```
-
-Then in your playbook / site.yml:
-
-```
----
-- name: Prep Docker assets
-  hosts: localhost
-  connection: local
-  tasks:
-    - name: Run prep tasks
-      ansible.builtin.import_role:
-        name: roles-docker
-        tasks_from: prep
-
-- name: Deploy Docker to targets
-  hosts: all
-  become: true
-  tasks:
-    - name: Run deploy tasks
-      ansible.builtin.import_role:
-        name: roles-docker
-        tasks_from: deploy
-```
-
-### Tracking development branch (unstable, for testing)
-
-```
-roles:
-
-- name: roles-docker
-  src: https://gitea.len-iot.id/ansible/roles-docker.git
-  version: development
-```
-
-### Local Development
-
-```bash
-git clone https://gitea.len-iot.id/ansible/roles-docker.git
-cd roles-docker
-```
-
-Run directly using the bundled playbooks:
-
-```bash
-# Preparation (runs on localhost)
-ansible-playbook playbooks/prep.yml
-
-# Deployment (targets your inventory)
-ansible-playbook -i environments/dev/inventory.yml playbooks/deploy.yml
-
-# Both
-ansible-playbook -i environments/dev/inventory.yml playbooks/site.yml
-```
-
----
-
 ## Requirements
 
 - Ansible 2.15 or later
-- Controller: internet access
-- Target: Ubuntu 24.04 (noble), Python 3
+- **Controller:** Ubuntu/Debian with internet access, `gpg`, and `apt` tools (`apt-cache`, `apt-get download`)
+- **Target:** Ubuntu (see supported releases above) with Python 3. No internet access required.
+
+> **Note:** System dependencies are resolved with `apt-cache` on the controller, so the controller should run the **same Ubuntu release** as the target. Otherwise the downloaded dependency versions may not match the target.
+
+---
+
+## Tasks
+
+### Prep phase (`tasks/prep.yml`, controller)
+
+| Phase       | Task                           | Description                                                                           |
+| ----------- | ------------------------------ | ------------------------------------------------------------------------------------- |
+| 1. Staging  | Create local staging directory | Creates `dest_docker_files` (mode `0755`).                                            |
+| 2. Download | Download offline packages      | Downloads the 5 Docker `.deb` files from `docker_repo_base`.                          |
+| 2. Download | Resolve full dependency list   | Resolves the recursive dependencies of `docker_system_deps` with `apt-cache depends`. |
+| 2. Download | Download system dependencies   | Downloads the resolved packages with `apt-get download`.                              |
+| 3. GPG key  | Generate GPG key               | Creates an RSA 4096 signing key for `gpg_key_email` (skipped if it already exists).   |
+| 4. Signing  | Sign all staged packages       | Creates a detached, armored `.asc` signature for every `.deb`.                        |
+| 5. Export   | Export public key              | Writes `docker-signing-key.gpg` to the staging directory.                             |
+
+### Deploy phase (`tasks/deploy.yml`, targets)
+
+| Phase       | Task                                     | Description                                                 |
+| ----------- | ---------------------------------------- | ----------------------------------------------------------- |
+| 1. Transfer | Create staging directory                 | Creates `dest_docker_file_tmp` on the target.               |
+| 1. Transfer | Transfer `.deb`, `.asc`, and signing key | Copies all staged assets to the target.                     |
+| 2. Verify   | Import Docker GPG public key             | Imports `docker-signing-key.gpg` into the target keyring.   |
+| 2. Verify   | Verify Docker package signatures         | Runs `gpg --verify` for each package in `docker_deb_files`. |
+| 3. Install  | Check installed docker-ce version        | Reads the currently installed `docker-ce` version, if any.  |
+| 3. Install  | Install all packages                     | Installs every staged `.deb` with `dpkg -i`.                |
+| 3. Install  | Configure pending packages               | Runs `dpkg --configure -a`.                                 |
+| 4. Service  | Ensure docker group exists               | Creates the `docker` system group.                          |
+| 4. Service  | Start Docker service                     | Starts and enables the `docker` service.                    |
+| 4. Service  | Add user to docker group                 | Adds `ansible_user` to the `docker` group.                  |
 
 ---
 
@@ -205,7 +122,6 @@ ansible-playbook -i environments/dev/inventory.yml playbooks/site.yml
 
 | Variable               | Default                                    | Description                                                                                      |
 | ---------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------ |
-| `docker_network_name`  | `"cms_network"`                            | Name of the Docker network created for the stack.                                                |
 | `gpg_key_email`        | `"docker-repo@localhost"`                  | Email identity of the GPG key used to sign the local Docker repository.                          |
 | `dest_docker_files`    | `"{{ playbook_dir }}/files/docker_assets"` | Directory on the control node where the downloaded `.deb` packages are stored.                   |
 | `dest_docker_file_tmp` | `"/tmp/docker_debs"`                       | Temporary directory on the target host where the `.deb` packages are copied before installation. |
@@ -226,10 +142,18 @@ ansible-playbook -i environments/dev/inventory.yml playbooks/site.yml
 
 ---
 
-## Configuration
+## Verification
 
-- Inventory: `environments/dev/inventory.yml`
-- Extra vars: `environments/dev/manifest.yml` (optional)
+After deployment, check the installation on the target:
+
+```bash
+docker --version
+docker compose version
+docker buildx version
+systemctl status docker
+```
+
+The user in `ansible_user` must log out and back in before the `docker` group membership takes effect.
 
 ---
 
@@ -276,5 +200,4 @@ GPL-3.0-only — see `meta/main.yml`.
 
 ## Author
 
-**DevOps Team**  
-PT Len IOT
+**Fuad Grimaldi**
